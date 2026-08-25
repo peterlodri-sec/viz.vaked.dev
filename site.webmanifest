@@ -1,0 +1,9 @@
+{
+  "name": "viz.vaked.dev",
+  "short_name": "viz",
+  "description": "ENTHEA — real-time psychedelic visual synthesizer · the geometry of the substrate within",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05060a",
+  "theme_color": "#05060a"
+}
