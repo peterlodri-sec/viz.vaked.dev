@@ -119,6 +119,15 @@
     display:grid;place-items:center;transition:transform 4s cubic-bezier(.4,0,.5,1)}
   #breathTxt{font-family:var(--mono);font-size:13px;letter-spacing:.3em;text-transform:uppercase;color:#fff;text-shadow:0 0 18px rgba(98,230,201,.8)}
 
+  #bb{position:fixed;right:16px;bottom:14px;z-index:40;font-family:var(--mono);font-size:10px;
+    letter-spacing:.22em;text-transform:uppercase;color:#a8ff78;background:rgba(5,8,5,.72);
+    border:1px solid rgba(98,230,201,.35);border-radius:6px;padding:5px 9px;
+    text-shadow:0 0 10px rgba(57,255,20,.6)}
+  #bb b{color:#62e6c9}
+  #dock{position:fixed;left:16px;bottom:14px;z-index:40;display:flex;gap:8px;
+    background:rgba(5,8,5,.72);border:1px solid rgba(98,230,201,.25);border-radius:6px;padding:6px}
+  #dock canvas{width:180px;height:52px;background:#000;border-radius:4px}
+
   #fatal{position:fixed;inset:0;z-index:50;display:none;place-items:center;text-align:center;padding:30px;
     font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--ink);background:var(--bg)}
 
@@ -304,6 +313,7 @@
       <div class="tg" id="tgFlicker"><span>flicker ✺ ~10 Hz drive</span><div class="sw"></div></div>
       <div class="tg" id="tgJourney"><span>autopilot ✦ self-driving VJ (A)</span><div class="sw"></div></div>
       <div class="tg" id="tgBreath"><span>breath pacer ✦ 4·4·4·4</span><div class="sw"></div></div>
+      <div class="tg" id="tgZyn"><span>zynn ultra ✦ wintergreen blast 9mg</span><div class="sw"></div></div>
       <div class="tg" id="tgMouse"><span>gaze warp ✧ cursor pull</span><div class="sw"></div></div>
       <div class="tg" id="tgRay"><span>3D raymarch ⬡ hyperspace depth</span><div class="sw"></div></div>
       <div class="tg" id="tgMath"><span>∑ math HUD · show the equations (=)</span><div class="sw"></div></div>
@@ -350,6 +360,12 @@
 </div>
 
 <div id="breath"><div id="breathRing"><div id="breathTxt">breathe in</div></div></div>
+
+<div id="bb">bb ✦ 4·4·4 breathing · <b>10Hz</b> · <span id="bbphase">env 1.00</span></div>
+<div id="dock">
+  <canvas id="dwave" width="360" height="104"></canvas>
+  <canvas id="dmath" width="360" height="104"></canvas>
+</div>
 
 <div id="science"><div class="card" id="scienceCard"></div></div>
 
@@ -2288,6 +2304,8 @@ function frame(){
     E.master.gain.setTargetAtTime(S.entrainVol, ct, 0.12); }
   const a=S.audio, aBoost = a.on ? a.bass*a.react*0.45 : 0.0;
   S.fxDose = approachTau(S.fxDose, Math.min(1.0, S.dose + aBoost), 0.10, dt); // bass blooms gain — glides, never jumps
+  if(S.breath){ const env = S.breathScale || 1; S.fxDose = Math.min(1.0, S.fxDose*(0.6+0.4*env)*(1+0.05*Math.sin(6.2831853*10*S.time))); } // bb 4-4-4 · 10Hz
+  if(S.zyn){ S.fxDose = Math.min(1.0, S.fxDose + 0.09); } // zynn ultra · the 9mg
 
   const dose=S.fxDose, fx=S.fx;
   const feedback = (S.mode===2||S.mode===13||S.mode===14) ? 0.0 : Math.min(0.985, S.trail + dose*fx.feedGain + S.asc*0.25 + (S.audio.dropEnv||0)*0.3);
@@ -2472,6 +2490,9 @@ function bindToggle(id,key,onChange){ const el=document.getElementById(id);
 bindToggle('tgFlicker','flicker',v=>flashHint(v?`✺ flicker drive on — ${S.fhz|0} Hz (≈10 Hz peaks geometry)`:'flicker off'));
 bindToggle('tgJourney','journey',v=>flashHint(v?'✶ auto-journey engaged — sit back':'auto-journey off'));
 bindToggle('tgBreath','breath',v=>{ document.getElementById('breath').classList.toggle('show',v); if(v) startBreath(); });
+bindToggle('tgZyn','zyn',v=>{ canvas.style.filter = v? 'hue-rotate(-38deg) saturate(1.12) contrast(1.05)' : ''; flashHint(v?'zynn ultra ✦ wintergreen blast 9mg — mint coolant, +9.0mg dose':'zynn off (cold turkey)'); });
+S.zyn = true; document.getElementById('tgZyn').classList.add('on');
+canvas.style.filter = 'hue-rotate(-38deg) saturate(1.12) contrast(1.05)'; // the knob ships ON
 bindToggle('tgMouse','mouse',v=>flashHint(v?'✧ gaze warp on — move your cursor':'gaze warp off'));
 bindToggle('tgRay','ray',v=>flashHint(v?'⬡ 3D raymarch — fly the hyperspace tunnel (switch to HYPERSPACE)':'3D raymarch off'));
 bindToggle('tgDrop','drop',v=>flashHint(v?'💥 drop detection on — loaded tracks get a precise predictive timeline; live audio uses reactive detection':'drop detection off'));
@@ -2576,7 +2597,35 @@ let breathStep=0, breathTimer=null;
 function startBreath(){ if(breathTimer) clearInterval(breathTimer); breathStep=0; doBreath();
   breathTimer=setInterval(()=>{ if(!S.breath){ clearInterval(breathTimer); return; } breathStep=(breathStep+1)%4; doBreath(); },4000); }
 function doBreath(){ const [txt,scale]=BREATH[breathStep];
-  document.getElementById('breathRing').style.transform=`scale(${scale})`; document.getElementById('breathTxt').textContent=txt; }
+  document.getElementById('breathRing').style.transform=`scale(${scale})`; document.getElementById('breathTxt').textContent=txt;
+  S.breathScale=scale; }
+
+/* bb dock — the badge with a heartbeat: wave + math side by side, breathing */
+const dWave=document.getElementById('dwave'), dMath=document.getElementById('dmath');
+const cw=dWave.getContext('2d'), cm=dMath.getContext('2d');
+S.breathScale = S.breathScale || 1.0;
+function bbTick(){
+  const t=performance.now();
+  const env = S.breath ? (S.breathScale || 1) : 1;
+  const dw=180, dh=52, mid=dh/2;
+  document.getElementById('bbphase').textContent='env '+env.toFixed(2);
+  cw.clearRect(0,0,dw,dh); cw.strokeStyle='#39ff14'; cw.lineWidth=1; cw.beginPath();
+  const n=360;
+  for(let i=0;i<=n;i++){ let v;
+    if(AUDIO && AUDIO.analyser && AUDIO.wave && AUDIO.wave.length){ v=AUDIO.wave[Math.floor(i*AUDIO.wave.length/n)]*0.5; }
+    else { v=Math.sin(i/9 + t*0.004); }
+    const x=i/n*dw, y=mid + v*mid*0.9;
+    i? cw.lineTo(x,y): cw.moveTo(x,y); }
+  cw.stroke();
+  cm.clearRect(0,0,dw,dh); cm.strokeStyle='#b48bff'; cm.lineWidth=1; cm.beginPath();
+  const rx=dw*0.30, ry=dh*0.30, cx2=dw/2, cy2=dh/2, ph=t*0.002;
+  for(let i=0;i<=90;i++){ const a=i/90*6.2831853;
+    const x=cx2+Math.sin(2*a+ph)*rx, y=cy2+Math.sin(3*a+ph*1.5)*ry*env;
+    i? cm.lineTo(x,y): cm.moveTo(x,y); }
+  cm.stroke();
+  requestAnimationFrame(bbTick);
+}
+requestAnimationFrame(bbTick);
 
 /* ============================== AUDIO ENTRAINMENT ============================== */
 /* Mic → Web Audio FFT → spectral bands drive cortical gain, throb, colour.
