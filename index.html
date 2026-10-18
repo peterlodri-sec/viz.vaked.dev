@@ -1937,9 +1937,12 @@ void main(){
     p *= 1.0 - uBands0.x*0.07;                            // sub-bass thump (scale)
     p += uBands0.z*0.08*vec2(sin(p.y*6.0+uTime*2.2), cos(p.x*6.0+uTime*1.9)); // low-mid wobble
     p = rot(uBands0.w*0.22*sin(uTime*0.8))*p;             // mid sway-rotate
-    float rr=length(p)/2.4;                               // ride the ACTUAL waveform: radial ripple by sample value
-    float wv=texture(uWaveform, vec2(clamp(rr,0.0,1.0),0.5)).r*2.0-1.0;
-    p += normalize(p+1e-4) * wv * 0.16 * uAudioAmt;       // geometry breathes along the song's wave
+    float rr=clamp(length(p)/2.4,0.0,1.0);                // smooth band + filtered waveform breath (zero 8-bit texel stair-stepping)
+    float wv=(texture(uWaveform, vec2(clamp(rr-0.016,0.0,1.0),0.5)).r
+             +2.0*texture(uWaveform, vec2(rr,0.5)).r
+             +texture(uWaveform, vec2(clamp(rr+0.016,0.0,1.0),0.5)).r)*0.5 - 1.0;
+    float ripple=sin(rr*6.2831853 - uTime*2.4)*uBands0.y*0.045 + cos(rr*9.424778 - uTime*1.8)*uBands0.w*0.030 + wv*0.028;
+    p += (p/(length(p)+0.06)) * ripple * uAudioAmt;       // C-infinity smooth radial breathing along the song's wave
   }
   if(uShear>0.001){ p.x += uShear*0.55*sin(p.y*3.0 + t*1.7); p = rot(uShear*0.25*sin(t*0.6))*p; }
   if(uBuild>0.001){ p *= 1.0 - uBuild*0.16; p = rot(uBuild*uBuild*1.0*sin(uTime*2.5))*p; } // anticipation: suck inward + accelerating spin
@@ -1975,9 +1978,11 @@ void main(){
   else if(uMode==26) col=waveMode(p,t);
   else if(uMode==27) col=phaseportal(p,t);
   else col=vortexMode(p,t);
-  if(uAudioAmt>0.001 && uMode!=14){                       // frequencies paint the field by radius (spectrum rings)
+  if(uAudioAmt>0.001 && uMode!=14){                       // frequencies paint the field by radius (smooth 3-tap spectrum rings)
     float rr=clamp(length(p)/2.4,0.0,1.0);
-    float sp=texture(uSpectrum, vec2(rr,0.5)).r;
+    float sp=(texture(uSpectrum, vec2(clamp(rr-0.015,0.0,1.0),0.5)).r
+             +2.0*texture(uSpectrum, vec2(rr,0.5)).r
+             +texture(uSpectrum, vec2(clamp(rr+0.015,0.0,1.0),0.5)).r)*0.25;
     col += PAL(fract(sp*0.6 + uCentroid*0.5 - uTime*0.04), uPalette) * sp*sp * uAudioAmt*0.5;
   }
   if(uChoreo>0.5 && uMode!=14){                           // choreography: blooms + spatial split + colour zones
@@ -1985,9 +1990,12 @@ void main(){
     float br=clamp(uBloomT,0.0,3.0);                      // expanding ring on each onset (bigger on drops)
     float ring=smoothstep(0.11,0.0, abs(rr - br*0.7)) * exp(-br*2.2) * (0.6+uFlux);
     col += PAL(fract(0.35 + uCentroid*0.4 + uTime*0.05), uPalette) * ring * 0.9; // beat blooms (bigger on drops)
-    col *= 1.0 + (p.x<0.0 ? uStereo.x : uStereo.y)*0.35;  // left↔bass · right↔treble split
+    col *= 1.0 + mix(uStereo.x, uStereo.y, smoothstep(-0.6, 0.6, p.x))*0.35;      // smooth left↔bass · right↔treble split (no hard p.x=0 seam)
     col *= 1.0 + uBands0.x*0.25;                          // sub-bass global swell
-    float sp2=texture(uSpectrum, vec2(clamp(rr,0.,1.),0.5)).r;
+    float rrc=clamp(rr,0.,1.);
+    float sp2=(texture(uSpectrum, vec2(clamp(rrc-0.015,0.,1.),0.5)).r
+              +2.0*texture(uSpectrum, vec2(rrc,0.5)).r
+              +texture(uSpectrum, vec2(clamp(rrc+0.015,0.,1.),0.5)).r)*0.25;
     col = mix(col, PAL(fract(rr*1.2 - uTime*0.03), uPalette), sp2*0.22); // per-frequency colour zones
     col += PAL(fract(rr*3.0 - uTime*0.1), uPalette) * (uBands1.x*0.30 + (uBands1.y+uBands1.z)*0.18) * (0.5+0.5*sin(rr*42.0)); // high-mid + treble/air → fine rings (organic, no grid)
   }
@@ -2107,7 +2115,7 @@ void main(){
   }
   if(uVoid>0.001){ float gv=dot(col,vec3(0.333)); col=mix(col,vec3(gv),uVoid*0.55);
     float rad=length((uv-0.5)*vec2(uRes.x/uRes.y,1.0)); col*=mix(1.0,smoothstep(1.25,0.12,rad),uVoid); }
-  float gr=hash21(gl_FragCoord.xy+floor(uTime*40.0)); col+=(gr-0.5)*(uGrain + uAudio.w*0.05);
+  float gr=hash21(gl_FragCoord.xy+floor(uTime*40.0)); col+=(gr-0.5)*uGrain;
   float vig=smoothstep(1.35,0.25,length((uv-0.5)*vec2(uRes.x/uRes.y,1.0))); col*=mix(1.0,vig,uVignette);
   col=aces(max(col,0.0));
   col=mix(col, col*col*(3.0-2.0*col), uTone);            // tone/depth — deepen the darks on demand
@@ -2220,6 +2228,7 @@ function makeTarget(w,h,wrapT){
 const FIELD_N=256, SPEC_N=96, WAVE_N=256, METER_BARS=24;
 let fieldA=makeTarget(FIELD_N,FIELD_N,gl.REPEAT), fieldB=makeTarget(FIELD_N,FIELD_N,gl.REPEAT);  // T=θ wraps
 // 1×N spectrum texture (log-spaced FFT magnitudes), uploaded each frame when audio is live
+gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
 const specTexture=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,specTexture);
 gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,SPEC_N,1,0,gl.RED,gl.UNSIGNED_BYTE,new Uint8Array(SPEC_N));
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -2247,7 +2256,7 @@ function resize(){
   const DPR=Math.min(window.devicePixelRatio||1, 2);
   const w=Math.floor(innerWidth*DPR), h=Math.floor(innerHeight*DPR);
   canvas.width=w; canvas.height=h; canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px';
-  allocScene(Math.max(2,Math.floor(w*0.85)), Math.max(2,Math.floor(h*0.85)));
+  allocScene(Math.max(2,w), Math.max(2,h));
   S.reseed=2;
 }
 addEventListener('resize',resize); resize();
@@ -2654,7 +2663,7 @@ const AUDIO = { ctx:null, analyser:null, data:null, src:null, stream:null,
   peak:{bass:0.05,mid:0.05,treble:0.05,level:0.05}, bassSlow:0, fluxSlow:0, lastBeatT:0, iois:[],
   spec:new Float32Array(SPEC_N), specPrev:new Float32Array(SPEC_N), specTex:new Uint8Array(SPEC_N), bars:null,
   hiSlow:0, hiFast:0, lvlSlow:0, primed:0, lastDrop:-99,
-  wave:null, waveL:null, waveR:null, waveTex:new Uint8Array(WAVE_N*2).fill(128), wavePeak:0.1,
+  wave:null, waveL:null, waveR:null, waveSmL:new Float32Array(WAVE_N), waveSmR:new Float32Array(WAVE_N), waveTex:new Uint8Array(WAVE_N*2).fill(128), wavePeak:0.2,
   splitter:null, anL:null, anR:null, silentSince:0, silentWarned:false };
 const isFirefox = /firefox/i.test(navigator.userAgent);
 function approachTau(cur,tgt,tau,dt){ return cur + (tgt-cur)*(1.0-Math.exp(-dt/Math.max(tau,1e-3))); }
@@ -2663,7 +2672,7 @@ function setAudioStatus(msg,cls){ const el=document.getElementById('audioStatus'
 async function enableAudio(){
   const src=S.audio.source, sys=src==='system', file=src==='file';
   try{
-    AUDIO.ctx = AUDIO.ctx || new (window.AudioContext||window.webkitAudioContext)(); await AUDIO.ctx.resume();
+    AUDIO.ctx = AUDIO.ctx || new (window.AudioContext||window.webkitAudioContext)({sampleRate:48000}); await AUDIO.ctx.resume();
     let node, onendTrack=null;
     if(file){
       if(!AUDIO.fileEl || !AUDIO.fileEl.src){ document.getElementById('audioFile').click(); return; }  // pick a track first
@@ -2678,14 +2687,22 @@ async function enableAudio(){
       if(stream.getAudioTracks().length===0){ stream.getTracks().forEach(t=>t.stop()); setAudioStatus('⚠ no audio in that capture — pick a <b>Chrome Tab</b> + tick <b>Share tab audio</b> (or use 📁 file)','warn'); return; }
       AUDIO.stream=stream; node=AUDIO.ctx.createMediaStreamSource(stream); onendTrack=stream.getAudioTracks()[0];
     } else {
-      const ac={echoCancellation:false,noiseSuppression:false,autoGainControl:false};
-      if(S.audio.deviceId) ac.deviceId={exact:S.audio.deviceId};   // e.g. BlackHole → captures all machine audio
+      const ac={echoCancellation:false,noiseSuppression:false,autoGainControl:false,sampleRate:{ideal:48000}};
+      if(S.audio.deviceId){
+        ac.deviceId={exact:S.audio.deviceId};   // e.g. BlackHole → captures all machine audio
+      } else if(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices){
+        try{
+          const ins=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput' && d.deviceId && d.deviceId!=='default');
+          const preferred=ins.find(d=>/blackhole|loopback|external microphone|built-?in|macbook/i.test(d.label||'') && !/airpods|bluetooth/i.test(d.label||''));
+          if(preferred) ac.deviceId={ideal:preferred.deviceId};
+        }catch(e){}
+      }
       const stream=await navigator.mediaDevices.getUserMedia({audio:ac});
       AUDIO.stream=stream; node=AUDIO.ctx.createMediaStreamSource(stream); onendTrack=stream.getAudioTracks()[0];
       refreshDevices();                                            // labels become available after permission
     }
     AUDIO.src=node;
-    AUDIO.analyser=AUDIO.ctx.createAnalyser(); AUDIO.analyser.fftSize=2048; AUDIO.analyser.smoothingTimeConstant=0.8;
+    AUDIO.analyser=AUDIO.ctx.createAnalyser(); AUDIO.analyser.fftSize=2048; AUDIO.analyser.smoothingTimeConstant=0.84;
     AUDIO.data=new Uint8Array(AUDIO.analyser.frequencyBinCount);
     node.connect(AUDIO.analyser);
     AUDIO.wave=new Float32Array(AUDIO.analyser.fftSize);
@@ -2774,15 +2791,29 @@ function updateAudio(dt){
   for(const k in RANGES){ a[k]=sm(a[k], agc(band(RANGES[k][0],RANGES[k][1]), k)); }
   a.level=sm(a.level, agc(rl,'level'));
   const nb=a.bass;            // smoothed bass band drives the beat onset
-  // log-spaced spectrum (→ GPU texture) + spectral centroid + spectral flux
+  // log-spaced spectrum (→ GPU texture) with fractional FFT bin interpolation + 5-tap spatial smoothing (prevents low-bin staircase rings)
   const minF=30, maxF=14000, lg=Math.log(maxF/minF); let csum=0,cwt=0,flux=0;
+  const sampleBin=(bf)=>{ const b=Math.max(0,Math.min(n-1.001,bf)), i=b|0, f=b-i; return d[i]*(1-f)+d[i+1]*f; };
   for(let j=0;j<SPEC_N;j++){
     const f0=minF*Math.exp(lg*j/SPEC_N), f1=minF*Math.exp(lg*(j+1)/SPEC_N);
-    let i0=Math.max(0,(f0/binHz)|0), i1=Math.min(n-1,Math.max(i0,(f1/binHz)|0)), s=0;
-    for(let i=i0;i<=i1;i++) s+=d[i]; s=Math.min(1,(s/(i1-i0+1)/255)*sens);
-    const prev=AUDIO.spec[j]; AUDIO.spec[j]= s>prev ? prev+(s-prev)*0.5 : prev+(s-prev)*0.2;
+    const b0=f0/binHz, b1=f1/binHz;
+    let s=0;
+    if(b1-b0<1.5){
+      const bm=0.5*(b0+b1);
+      s=(0.25*sampleBin(bm-0.5)+0.5*sampleBin(bm)+0.25*sampleBin(bm+0.5))/255*sens;
+    } else {
+      let i0=Math.max(0,b0|0), i1=Math.min(n-1,Math.ceil(b1)), cnt=0;
+      for(let i=i0;i<=i1;i++){ s+=d[i]; cnt++; }
+      s=(s/Math.max(1,cnt)/255)*sens;
+    }
+    s=Math.min(1,s);
+    const prev=AUDIO.spec[j]; AUDIO.spec[j]= s>prev ? prev+(s-prev)*0.45 : prev+(s-prev)*0.18;
     flux += Math.max(0, AUDIO.spec[j]-AUDIO.specPrev[j]); AUDIO.specPrev[j]=AUDIO.spec[j];
-    AUDIO.specTex[j]=(AUDIO.spec[j]*255)|0; csum += AUDIO.spec[j]*j; cwt += AUDIO.spec[j];
+    csum += AUDIO.spec[j]*j; cwt += AUDIO.spec[j];
+  }
+  for(let j=0;j<SPEC_N;j++){
+    const s0=AUDIO.spec[Math.max(0,j-2)], s1=AUDIO.spec[Math.max(0,j-1)], s2=AUDIO.spec[j], s3=AUDIO.spec[Math.min(SPEC_N-1,j+1)], s4=AUDIO.spec[Math.min(SPEC_N-1,j+2)];
+    AUDIO.specTex[j]=(((s0 + 4*s1 + 6*s2 + 4*s3 + s4)/16)*255)|0;
   }
   flux/=SPEC_N;
   a.centroid=approachTau(a.centroid, cwt>0?(csum/cwt)/SPEC_N:0.0, 0.3, dt);
@@ -2817,7 +2848,7 @@ function updateAudio(dt){
   if(S.drop && !useTL && (S.time-AUDIO.lastDrop)>5.0 && surge && (a.build>0.4||AUDIO.primed>0.4)) fireDrop(true);
   if(useTL) updateTimeline(a);                                      // ✦ precise, predictive, timeline-synced (overrides reactive)
   a.dropEnv=approachTau(a.dropEnv,0,0.85,dt);                       // blast decays over ~2.5s
-  // --- time-domain WAVEFORM: the actual oscilloscope samples → GPU (RG = L,R) ---
+  // --- time-domain WAVEFORM: window-averaged + temporally smoothed oscilloscope samples → GPU (RG = L,R) ---
   if(AUDIO.wave){
     AUDIO.analyser.getFloatTimeDomainData(AUDIO.wave);
     if(AUDIO.anL&&AUDIO.anR){ AUDIO.anL.getFloatTimeDomainData(AUDIO.waveL); AUDIO.anR.getFloatTimeDomainData(AUDIO.waveR); }
@@ -2826,11 +2857,22 @@ function updateAudio(dt){
     rms=Math.sqrt(rms/wn);
     a.crest=approachTau(a.crest||0, Math.min(1,(pk/Math.max(rms,1e-3))/4), 0.2, dt); // transient sharpness (peak/RMS)
     a.zcr  =approachTau(a.zcr||0,  Math.min(1, zc/wn*4), 0.2, dt);                     // zero-crossing rate (brightness)
-    AUDIO.wavePeak=Math.max(pk, AUDIO.wavePeak*Math.exp(-dt/1.5), 0.05/Math.max(0.3,sens)); // slow AGC so quiet tracks still show
-    const g=0.92/AUDIO.wavePeak, lt=AUDIO.waveL||W, rt=AUDIO.waveR||W, T=AUDIO.waveTex;
-    for(let j=0;j<WAVE_N;j++){ const idx=(j/WAVE_N*wn)|0;
-      let l=lt[idx]*g, r=rt[idx]*g; l=l<-1?-1:l>1?1:l; r=r<-1?-1:r>1?1:r;
-      T[j*2]=((l*0.5+0.5)*255)|0; T[j*2+1]=((r*0.5+0.5)*255)|0; }
+    AUDIO.wavePeak=Math.max(pk, AUDIO.wavePeak*Math.exp(-dt/1.5), 0.18/Math.max(0.5,sens)); // sane AGC floor so room noise isn't over-amplified
+    const g=0.88/AUDIO.wavePeak, lt=AUDIO.waveL||W, rt=AUDIO.waveR||W, T=AUDIO.waveTex, smL=AUDIO.waveSmL, smR=AUDIO.waveSmR;
+    const stride=Math.max(1,(wn/WAVE_N)|0);
+    for(let j=0;j<WAVE_N;j++){
+      const i0=(j/WAVE_N*wn)|0;
+      let sl=0, sr=0;
+      for(let k=0;k<stride;k++){ const idx=Math.min(wn-1,i0+k); sl+=lt[idx]; sr+=rt[idx]; }
+      sl=(sl/stride)*g; sr=(sr/stride)*g;
+      smL[j]=smL[j]*0.55 + sl*0.45; smR[j]=smR[j]*0.55 + sr*0.45;
+    }
+    for(let j=0;j<WAVE_N;j++){
+      const j0=Math.max(0,j-1), j2=Math.min(WAVE_N-1,j+1);
+      let l=0.25*smL[j0]+0.5*smL[j]+0.25*smL[j2], r=0.25*smR[j0]+0.5*smR[j]+0.25*smR[j2];
+      l=l<-1?-1:l>1?1:l; r=r<-1?-1:r>1?1:r;
+      T[j*2]=((l*0.5+0.5)*255)|0; T[j*2+1]=((r*0.5+0.5)*255)|0;
+    }
   }
   // --- DRM / silent-capture watchdog (Spotify web mutes on tab-capture) ---
   if(a.source==='system'){
