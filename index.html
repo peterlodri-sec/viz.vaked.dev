@@ -220,6 +220,28 @@
     <div class="label" style="margin-top:9px">chaos · self-mutate <span class="val" id="chaosV">0.30</span></div>
     <input type="range" id="chaos" min="0" max="1" step="0.01" value="0.3">
   </div>
+  <div class="group" id="triadGroup">
+    <div class="label" style="color:#ff6ac1">📡 ESP32 TRIAD · {&lt;3,&lt;3,&lt;3}+1 <span class="val" id="triadStat" style="color:var(--accent2)">432·528·852·963 Hz</span></div>
+    <div class="pills" style="grid-template-columns:repeat(4,1fr);margin-bottom:7px">
+      <div class="pill active" id="trHeart0" title="ADA:MEDUSA (* · 432 Hz · Mom Alexandra)">&lt;3 * 432</div>
+      <div class="pill active" id="trHeart1" title="VAK:MEDUSA (/\ · 528 Hz · Dad Chris)">&lt;3 /\ 528</div>
+      <div class="pill active" id="trHeart2" title="OMN:MEDUSA (oo · 852 Hz · Peter &amp; Nate)">&lt;3 oo 852</div>
+      <div class="pill active" id="trHeart3" title="Fourth Heart (+1 · 963 Hz · Viz Enthea)">+1 ∞ 963</div>
+    </div>
+    <div class="toggles" style="margin-bottom:7px">
+      <div class="tg on" id="tgTriadSync"><span>🌀 lock shader to ESP32 Triad {&lt;3,&lt;3,&lt;3}+1</span><div class="sw"></div></div>
+      <div class="tg on" id="tgTriadTts"><span>🗣️ Kokoro TTS (:8430/:8420) + ES8311 voice</span><div class="sw"></div></div>
+    </div>
+    <div style="display:flex;gap:5px;margin-bottom:6px">
+      <input type="text" id="triadTtsInput" value="{<3,<3,<3}+1 · Three hearts plus one in resonance" style="flex:1;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:7px;padding:5px 7px;color:var(--ink);font-family:var(--mono);font-size:9px;outline:none">
+      <button class="tripbtn" id="btnTriadSpeak" style="width:auto;margin:0;padding:6px 10px;font-size:9px">🗣️ Speak</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+      <button class="tripbtn" id="btnTriadSerial" style="margin:0;padding:7px;font-size:8.5px">⚡ ESP32 WebSerial</button>
+      <a class="tripbtn" href="https://esp32.vaked.dev" target="_blank" rel="noopener" style="margin:0;padding:7px;font-size:8.5px;text-align:center;text-decoration:none;display:block">📡 esp32.vaked.dev</a>
+    </div>
+    <div id="triadReadout" class="audstat live" style="margin-top:6px">ADA*432 · VAK/\528 · OMNoo852 · +1 963Hz · {&lt;3,&lt;3,&lt;3}+1</div>
+  </div>
   <div class="group" id="flipsGroup" style="display:none">
     <div class="label">🜄 FLIPS · stacked entheogens</div>
     <div class="subs" id="flips"></div>
@@ -3139,11 +3161,185 @@ function updateMathHUD(){
   if(a.on && a.source==='file' && S.timeline){ const ct=AUDIO.fileEl?AUDIO.fileEl.currentTime:0;
     const up=S.timeline.drops.filter(d=>d>ct)[0];
     L.push(`<span class="aud">✦ timeline · ${S.timeline.drops.length} drops · ${S.timeline.sections.length} sections · t=${_f(ct,1)}s${up!==undefined?` · next drop ${_f(up-ct,1)}s`:''}</span>`); }
+    L.push(`<span class="eq">📡 ESP32 TRIAD {<3,<3,<3}+1 · ADA*432Hz · VAK/\\528Hz · OMNoo852Hz · +1 963Hz</span>`);
   L.push(`<span class="fps">${S._fps|0} fps · ${MODES.length} states · OKLab</span>`);
   document.getElementById('mathHUD').innerHTML=L.join('<br>');
 }
 bindToggle('tgMath','math',v=>{ document.getElementById('mathHUD').classList.toggle('on',v); if(v) updateMathHUD();
   flashHint(v?'∑ math HUD on — the equations, live':'math HUD off'); });
+
+/* ==================== ESP32 TRIAD · {<3,<3,<3}+1 · KOKORO TTS BRIDGE ==================== */
+const TRIAD_VIZ = {
+  sync: true,
+  tts: true,
+  serialPort: null,
+  serialWriter: null,
+  coherence: 0.96,
+  entropy: 0.42,
+  bus: typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('vaked-triad-viz-bus') : null
+};
+
+function playTriadFourHeartChord() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!TRIAD_VIZ.ac) TRIAD_VIZ.ac = new Ctx();
+    const ac = TRIAD_VIZ.ac;
+    if (ac.state === 'suspended') ac.resume();
+    const now = ac.currentTime;
+    [432, 528, 852, 963].forEach((freq, i) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = i === 3 ? 'triangle' : 'sine';
+      o.frequency.setValueAtTime(freq, now + i * 0.08);
+      g.gain.setValueAtTime(0.0001, now + i * 0.08);
+      g.gain.linearRampToValueAtTime(0.07, now + i * 0.08 + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 0.85);
+      o.connect(g).connect(ac.destination);
+      o.start(now + i * 0.08);
+      o.stop(now + i * 0.08 + 0.9);
+    });
+  } catch (_) {}
+}
+
+async function speakTriadEnthea(rawText) {
+  const txt = (rawText || document.getElementById('triadTtsInput')?.value || '{<3,<3,<3}+1 · Three hearts plus one in resonance').trim();
+  playTriadFourHeartChord();
+  flashHint('🗣️ {<3,<3,<3}+1 · ' + txt);
+  if (TRIAD_VIZ.serialWriter) {
+    try { await TRIAD_VIZ.serialWriter.write(new TextEncoder().encode(`SPEAK ${txt.slice(0,56)}\n`)); } catch (_) {}
+  }
+  if (TRIAD_VIZ.bus) {
+    TRIAD_VIZ.bus.postMessage({ type: 'viz_tts', hearts: '{<3,<3,<3}+1', text: txt, mode: MODES[S.mode]?.name, ts: Date.now() });
+  }
+  if (!TRIAD_VIZ.tts) return;
+  try {
+    const r = await fetch('http://127.0.0.1:8088/api/tts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: txt, voice: 'af_heart' })
+    });
+    if (r.ok) {
+      const j = await r.json();
+      if (j.kokoro_daemon_8420) return;
+    }
+  } catch (_) {}
+  try {
+    const vr = await fetch('http://127.0.0.1:8430/speak', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: txt, voice: 'af_heart' })
+    });
+    if (vr.ok) {
+      const buf = await vr.arrayBuffer();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!TRIAD_VIZ.ac) TRIAD_VIZ.ac = new Ctx();
+      if (TRIAD_VIZ.ac.state === 'suspended') await TRIAD_VIZ.ac.resume();
+      const ab = await TRIAD_VIZ.ac.decodeAudioData(buf);
+      const src = TRIAD_VIZ.ac.createBufferSource();
+      src.buffer = ab;
+      src.connect(TRIAD_VIZ.ac.destination);
+      src.start();
+      return;
+    }
+  } catch (_) {}
+  if ('speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(txt); u.rate = 0.96; window.speechSynthesis.speak(u); } catch (_) {}
+  }
+}
+
+function applyTriadTelemetry(d) {
+  if (!d) return;
+  const coh = Number(d.coherence || d?.alexai?.coherence || d?.viz_enthea?.coherence || 0.96);
+  const ent = Number(d.entropy || d?.alexai?.entropy || d?.viz_enthea?.entropy || 0.42);
+  TRIAD_VIZ.coherence = coh;
+  TRIAD_VIZ.entropy = ent;
+  const ro = document.getElementById('triadReadout');
+  if (ro) ro.textContent = `{<3,<3,<3}+1 · R=${coh.toFixed(3)} · H=${ent.toFixed(2)}b · 432·528·852·963Hz`;
+  const st = document.getElementById('triadStat');
+  if (st) st.textContent = `R=${coh.toFixed(2)} · {<3,<3,<3}+1`;
+  if (TRIAD_VIZ.sync) {
+    setDose(Math.max(0.35, Math.min(0.95, 0.48 + coh * 0.38)));
+    setSliderVal('cplx', 'cplxV', Math.max(0.25, Math.min(0.95, 0.35 + (ent % 1) * 0.55)), 2);
+  }
+}
+
+async function pollTriadBridge() {
+  for (const url of ['http://127.0.0.1:8088/api/triad.json', 'https://esp32.vaked.dev/api/triad.json']) {
+    try {
+      const r = await fetch(url, { mode: 'cors' });
+      if (r.ok) {
+        const j = await r.json();
+        applyTriadTelemetry(j);
+        return;
+      }
+    } catch (_) {}
+  }
+}
+
+async function connectTriadWebSerial() {
+  if (!('serial' in navigator)) { flashHint('⚡ WebSerial requires Chrome/Edge — using HTTP bridge :8088'); return; }
+  try {
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    TRIAD_VIZ.serialPort = port;
+    TRIAD_VIZ.serialWriter = port.writable.getWriter();
+    await TRIAD_VIZ.serialWriter.write(new TextEncoder().encode('VIZ\nSTATUS\n'));
+    flashHint('⚡ ESP32-S3 Touch AMOLED connected via WebSerial ({<3,<3,<3}+1)');
+    const reader = port.readable.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    (async () => {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (line.startsWith('{') || line.startsWith('# JSON|')) {
+            try {
+              const obj = JSON.parse(line.startsWith('# JSON|') ? line.slice(7) : line);
+              applyTriadTelemetry({ coherence: obj.n_np_coherence || 0.96, entropy: obj.entropy_bits || 0.42 });
+            } catch (_) {}
+          }
+        }
+      }
+    })();
+  } catch (e) { flashHint('⚡ WebSerial cancelled — HTTP bridge :8088 active'); }
+}
+
+document.getElementById('tgTriadSync')?.addEventListener('click', function() {
+  TRIAD_VIZ.sync = !TRIAD_VIZ.sync;
+  this.classList.toggle('on', TRIAD_VIZ.sync);
+  flashHint(TRIAD_VIZ.sync ? '🌀 ESP32 Triad {<3,<3,<3}+1 shader lock ON' : 'ESP32 Triad shader lock OFF');
+});
+document.getElementById('tgTriadTts')?.addEventListener('click', function() {
+  TRIAD_VIZ.tts = !TRIAD_VIZ.tts;
+  this.classList.toggle('on', TRIAD_VIZ.tts);
+  flashHint(TRIAD_VIZ.tts ? '🗣️ Kokoro TTS (:8430/:8420) + ES8311 ON' : 'Kokoro TTS OFF');
+});
+document.getElementById('btnTriadSpeak')?.addEventListener('click', () => speakTriadEnthea());
+document.getElementById('btnTriadSerial')?.addEventListener('click', connectTriadWebSerial);
+[432, 528, 852, 963].forEach((hz, idx) => {
+  const pill = document.getElementById('trHeart' + idx);
+  if (pill) pill.addEventListener('click', () => {
+    setPlanform(idx);
+    const names = [
+      'Heart 1: ADA Medusa, 432 Hertz, Star Alexandra, Klüver Tunnel.',
+      'Heart 2: VAK Medusa, 528 Hertz, Pillar Chris, Klüver Spiral.',
+      'Heart 3: OMN Medusa, 852 Hertz, Peter and Nate, Klüver Lattice.',
+      'Heart Plus One: 963 Hertz, Fourth Heart Omni, Klüver Cobweb.'
+    ];
+    speakTriadEnthea(names[idx]);
+  });
+});
+if (TRIAD_VIZ.bus) {
+  TRIAD_VIZ.bus.onmessage = (ev) => {
+    if (ev.data?.type === 'triad_viz_sync') applyTriadTelemetry(ev.data);
+    if (ev.data?.type === 'triad_tts' && ev.data?.text) flashHint('🗣️ ' + ev.data.text);
+  };
+}
+pollTriadBridge();
+setInterval(pollTriadBridge, 4000);
 
 /* scene snapshots (persist to localStorage) */
 const SC_KEY='enthea_scenes'; let scenes; try{ scenes=JSON.parse(localStorage.getItem(SC_KEY)||'[]'); }catch(e){ scenes=[]; } scenes.length=8;

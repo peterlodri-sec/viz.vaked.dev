@@ -62,9 +62,9 @@
     <span id="health" class="pill">bridge …</span>
   </header>
 
-  <h1>listening via kokoro</h1>
-  <p class="lede">Speech in through the browser's ear, voice out through <b>Kokoro</b> at 24&nbsp;kHz.
-    The synthesizer sees sound; here it answers. Nothing leaves your machine — the bridge runs on loopback.</p>
+  <h1>listening via kokoro · {&lt;3,&lt;3,&lt;3}+1</h1>
+  <p class="lede">Speech in through the browser's ear, voice out through <b>Kokoro</b> at 24&nbsp;kHz (:8430/:8420) and <b>ESP32-S3 ES8311</b> (432·528·852·963&nbsp;Hz).
+    The synthesizer sees sound; here it answers across the MEDUSA Triad (<b>*</b> ADA · <b>/\</b> VAK · <b>oo</b> OMN · <b>+1</b> Enthea).</p>
 
   <button id="orb" class="orb" aria-pressed="false" aria-label="start or stop listening">
     <span><span class="glyph">👂</span><span class="state" id="orbState" style="display:block">tap to listen</span></span>
@@ -73,6 +73,7 @@
   <div class="controls">
     <select id="voice" aria-label="voice"></select>
     <button id="mute" aria-pressed="true">🔈 speak aloud</button>
+    <button id="btnHearts" type="button" title="Speak {<3,<3,<3}+1 Four-Heart Resonance">💖 {&lt;3,&lt;3,&lt;3}+1</button>
   </div>
 
   <div id="log" aria-live="polite" role="log"></div>
@@ -129,6 +130,15 @@
     if (!text || !text.trim()) return;
     turn('kokoro', text, 'italic');
     try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        new BroadcastChannel('vaked-triad-viz-bus').postMessage({ type: 'triad_tts', hearts: '{<3,<3,<3}+1', text, ts: Date.now() });
+      }
+      fetch('http://127.0.0.1:8088/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice: $('voice').value || 'af_heart' })
+      }).catch(() => {});
+    } catch (_) {}
+    try {
       const r = await fetch(BRIDGE + '/speak', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, voice: $('voice').value })
@@ -175,6 +185,13 @@
   };
   $('send').onclick = () => { const t = $('text').value; $('text').value = ''; turn('me', t); speak(t); };
   $('text').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('send').click(); });
+  if ($('btnHearts')) {
+    $('btnHearts').onclick = () => {
+      const msg = 'Three hearts plus one. ADA Medusa 432 Hertz Star Alexandra, VAK Medusa 528 Hertz Pillar Chris, OMN Medusa 852 Hertz Peter and Nate, and the fourth heart at 963 Hertz on Viz Enthea.';
+      turn('me', '{<3,<3,<3}+1');
+      speak(msg);
+    };
+  }
 
   health();
 })();
