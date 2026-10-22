@@ -3262,6 +3262,25 @@ function applyTriadTelemetry(d) {
 }
 
 async function pollTriadBridge() {
+  try {
+    const er = await fetch('http://127.0.0.1:8088/api/engine', { mode: 'cors' });
+    if (er.ok) {
+      const { feed } = await er.json();
+      if (feed && feed.music) {
+        const m = feed.music, e = feed.engine || {};
+        TRIAD_VIZ.engine = feed;
+        // 8b-is-music feeds ENTHEA: liquid EQ bands -> symmetry/tone, family chord -> tempo, CT-000 -> trails
+        const eq = m.eq_bands_db || [];
+        const avg = eq.length ? eq.reduce((a,b)=>a+b,0)/eq.length : 2.5;
+        if (TRIAD_VIZ.sync) {
+          setSliderVal('sym','symV', Math.max(3, Math.min(12, Math.round(3 + avg*2))), 0);
+          setSliderVal('speed','speedV', Math.max(0.6, Math.min(1.8, (m.family_chord_hz||2712)/2712)), 2);
+        }
+        const ro = document.getElementById('triadReadout');
+        if (ro) ro.textContent = `8b-is-music ${m.quant65k_layers}L · ${m.qt} · ${m.spherepop_chord} · CT-000 ${e.ct000_routing_holds&&e.ct000_family_holds?'✓':'✗'} · {<3,<3,<3}+1`;
+      }
+    }
+  } catch (_) {}
   for (const url of ['http://127.0.0.1:8088/api/triad.json', 'https://esp32.vaked.dev/api/triad.json']) {
     try {
       const r = await fetch(url, { mode: 'cors' });
